@@ -135,7 +135,14 @@ export function ExpenseDiary() {
   })
 
   // Summary Metrics
-  const totalAmount = expenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+  const getExpensePaise = (e) => {
+    if (e.amountPaise != null) return Number(e.amountPaise);
+    if (e.amount != null) return e.isPaise === false ? Math.round(Number(e.amount) * 100) : Number(e.amount);
+    if (e.amountRupees != null) return Math.round(Number(e.amountRupees) * 100);
+    return 0;
+  };
+
+  const totalAmount = expenses.reduce((acc, curr) => acc + getExpensePaise(curr), 0)
   const withReceiptsCount = expenses.filter((e) => e.attachments?.length || e.hasReceipt || e.receiptUrl).length
   const missingReceiptsCount = expenses.length - withReceiptsCount
   const pendingReviewCount = expenses.filter((e) => (e.reviewStatus || e.status || 'pending') === 'pending').length

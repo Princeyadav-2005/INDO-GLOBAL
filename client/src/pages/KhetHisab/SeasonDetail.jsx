@@ -92,7 +92,14 @@ export function SeasonDetail() {
     )
   }
 
-  const totalExpenseAmount = expenses.reduce((a, b) => a + (b.amount || 0), 0)
+  const getExpensePaise = (e) => {
+    if (e.amountPaise != null) return Number(e.amountPaise);
+    if (e.amount != null) return e.isPaise === false ? Math.round(Number(e.amount) * 100) : Number(e.amount);
+    if (e.amountRupees != null) return Math.round(Number(e.amountRupees) * 100);
+    return 0;
+  };
+
+  const totalExpenseAmount = expenses.reduce((a, b) => a + getExpensePaise(b), 0)
 
   return (
     <div className="animate-fadeIn">
@@ -151,12 +158,12 @@ export function SeasonDetail() {
         <div className="grid grid-3 gap-3">
           <div>
             <span className="text-xs text-secondary">Kul Lagat (Allowable Expenses):</span>
-            <div className="font-bold text-lg text-primary">{formatRupees(totalExpenseAmount)}</div>
+            <div className="font-bold text-lg text-primary">{formatRupees(totalExpenseAmount, true)}</div>
           </div>
           <div>
             <span className="text-xs text-secondary">Kul Upaj Bikri (Gross Revenue):</span>
             <div className="font-bold text-lg text-success">
-              {formatRupees(settlement?.grossSales || 0, settlement?.isPaise ?? false)}
+              {formatRupees(settlement?.grossSalePaise ?? settlement?.grossSales ?? 0, true)}
             </div>
           </div>
           <div>

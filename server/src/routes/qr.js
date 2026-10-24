@@ -11,8 +11,14 @@ const dbCheck = (res) => { const db = getDb(); if (!db) { res.status(503).json({
 // POST /:seasonId/generate
 router.post('/:seasonId/generate', authenticate, async (req, res, next) => {
   try {
-    const { accessLevel, expiresInDays } = req.body;
-    const result = await generatePassportQR({ seasonId: req.params.seasonId, userId: req.user.id, accessLevel, expiresInDays: expiresInDays ? parseInt(expiresInDays, 10) : null });
+    const { accessLevel, expiresInDays, expiryDays } = req.body || {};
+    const days = expiresInDays !== undefined ? expiresInDays : expiryDays;
+    const result = await generatePassportQR({
+      seasonId: req.params.seasonId,
+      userId: req.user.id,
+      accessLevel: accessLevel || 'public_summary',
+      expiresInDays: days ? parseInt(days, 10) : null
+    });
     if (result.error) return res.status(500).json({ success: false, message: result.error });
     return res.status(201).json({ success: true, message: 'QR Passport generated.', data: result });
   } catch (err) { next(err); }

@@ -1,15 +1,35 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 
-export function QRDisplay({ url, size = 200, label = 'Khet Passport QR' }) {
+export function QRDisplay({ url, qrDataUrl, size = 200, label = 'Khet Passport QR' }) {
   const [copied, setCopied] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [imgSrc, setImgSrc] = useState(qrDataUrl || '')
+
+  useEffect(() => {
+    if (qrDataUrl) {
+      setImgSrc(qrDataUrl)
+      return
+    }
+    if (url) {
+      QRCodeLib.toDataURL(url, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: '#0f3d1c',
+          light: '#ffffff'
+        }
+      })
+        .then((dataUri) => setImgSrc(dataUri))
+        .catch(() => {})
+    }
+  }, [url, qrDataUrl])
 
   const handleDownload = async () => {
     try {
       setDownloading(true)
-      const dataUrl = await QRCodeLib.toDataURL(url, {
+      const dataUrl = imgSrc || await QRCodeLib.toDataURL(url, {
         width: 600,
         margin: 2,
         color: {
@@ -44,7 +64,6 @@ export function QRDisplay({ url, size = 200, label = 'Khet Passport QR' }) {
         }
       }
     } else {
-      // Fallback copy
       handleCopy()
     }
   }
@@ -80,13 +99,21 @@ export function QRDisplay({ url, size = 200, label = 'Khet Passport QR' }) {
           boxShadow: 'inset 0 0 10px rgba(0,0,0,0.03)'
         }}
       >
-        <QRCode
-          value={url || 'https://farmerconnect.in'}
-          size={size}
-          style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-          viewBox={`0 0 256 256`}
-          fgColor="#0f3d1c"
-        />
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt="QR Code"
+            style={{ width: `${size}px`, height: `${size}px`, objectFit: 'contain', display: 'block' }}
+          />
+        ) : (
+          <QRCode
+            value={url || 'https://farmerconnect.in'}
+            size={size}
+            style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
+            viewBox={`0 0 256 256`}
+            fgColor="#0f3d1c"
+          />
+        )}
       </div>
 
       <div className="mt-4 p-2 bg-surface-2 rounded text-xs text-muted" style={{ wordBreak: 'break-all' }}>

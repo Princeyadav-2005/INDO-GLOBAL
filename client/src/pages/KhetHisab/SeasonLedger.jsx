@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { seasonsAPI, expensesAPI, settlementAPI, harvestAPI, consistencyAPI } from '../../services/api'
+import { seasonsAPI, expensesAPI, settlementAPI, harvestAPI, consistencyAPI, qrAPI } from '../../services/api'
 import ExpenseCard from '../../components/Expenses/ExpenseCard'
+import QRDisplay from '../../components/QR/QRDisplay'
 import LoadingSpinner from '../../components/UI/LoadingSpinner'
 import EmptyState from '../../components/UI/EmptyState'
 import Alert from '../../components/UI/Alert'
@@ -24,6 +25,11 @@ export function SeasonLedger() {
   const [harvestRecord, setHarvestRecord] = useState(null)
   const [settlement, setSettlement] = useState(null)
   const [consistencyResult, setConsistencyResult] = useState(null)
+
+  // Owner QR Passport State
+  const [qrModalOpen, setQrModalOpen] = useState(false)
+  const [generatingQR, setGeneratingQR] = useState(false)
+  const [settlementQR, setSettlementQR] = useState(null)
 
   useEffect(() => {
     loadSeasons()
@@ -129,11 +135,48 @@ export function SeasonLedger() {
     }
   }
 
+  const handleGenerateOwnerQR = async () => {
+    if (!selectedSeasonId) return
+    try {
+      setGeneratingQR(true)
+      setError(null)
+      const res = await qrAPI.generate(selectedSeasonId, {
+        accessLevel: 'stakeholders_only',
+        expiresInDays: 90,
+        expiryDays: 90
+      })
+      const dataObj = res?.data || res?.passport || res
+      const token = dataObj?.token || dataObj?.passport?.token || dataObj?.id
+      const qrDataUrl = dataObj?.qrDataUrl || dataObj?.passport?.qrCodeDataUrl || ''
+      const fullUrl = `${window.location.origin}/passport/${token}`
+
+      setSettlementQR({
+        token,
+        fullUrl,
+        qrDataUrl,
+        crop: seasonData?.crop || 'Khet'
+      })
+      setQrModalOpen(true)
+      setSuccessMsg('Khet Malik ke hisaab verification ke liye QR Passport taiyar ho gaya!')
+    } catch (err) {
+      setError(err.message || 'QR Passport generate karne me samasya aayi.')
+    } finally {
+      setGeneratingQR(false)
+    }
+  }
+
   // Summaries
-  const totalExpenses = expenses.reduce((a, b) => a + (b.amount || 0), 0)
-  const ackExpenses = expenses.filter(e => (e.reviewStatus || e.status) === 'acknowledged').reduce((a, b) => a + (b.amount || 0), 0)
-  const disputedExpenses = expenses.filter(e => (e.reviewStatus || e.status) === 'disputed').reduce((a, b) => a + (b.amount || 0), 0)
-  const pendingExpenses = expenses.filter(e => (e.reviewStatus || e.status || 'pending') === 'pending').reduce((a, b) => a + (b.amount || 0), 0)
+  const getExpensePaise = (e) => {
+    if (e.amountPaise != null) return Number(e.amountPaise);
+    if (e.amount != null) return e.isPaise === false ? Math.round(Number(e.amount) * 100) : Number(e.amount);
+    if (e.amountRupees != null) return Math.round(Number(e.amountRupees) * 100);
+    return 0;
+  };
+
+  const totalExpenses = expenses.reduce((a, b) => a + getExpensePaise(b), 0)
+  const ackExpenses = expenses.filter(e => (e.reviewStatus || e.status) === 'acknowledged' || (e.reviewStatus || e.status) === 'approved').reduce((a, b) => a + getExpensePaise(b), 0)
+  const disputedExpenses = expenses.filter(e => (e.reviewStatus || e.status) === 'disputed').reduce((a, b) => a + getExpensePaise(b), 0)
+  const pendingExpenses = expenses.filter(e => (e.reviewStatus || e.status || 'pending') === 'pending').reduce((a, b) => a + getExpensePaise(b), 0)
 
   return (
     <div className="animate-fadeIn">
@@ -287,18 +330,20 @@ export function SeasonLedger() {
                 <div className="grid grid-3 gap-3 mb-4">
                   <div>
                     <span className="text-secondary text-xs">Kul Lagat (Allowable Expense):</span>
-                    <div className="font-bold text-base">{formatRupees(settlement.totalExpenses || totalExpenses)}</div>
+                    <div className="font-bold text-base">
+                      {formatRupees(settlement.totalExpensesPaise ?? settlement.totalExpenses ?? totalExpenses, true)}
+                    </div>
                   </div>
                   <div>
                     <span className="text-secondary text-xs">Kul Upaj Bikri (Gross Sales):</span>
                     <div className="font-bold text-base text-success">
-                      {formatRupees(settlement.grossSales || 0, settlement.isPaise ?? false)}
+                      {formatRupees(settlement.grossSalePaise ?? settlement.grossSales ?? 0, true)}
                     </div>
                   </div>
                   <div>
                     <span className="text-secondary text-xs">Shuddh Munafa (Net Profit):</span>
                     <div className="font-bold text-base text-primary">
-                      {formatRupees(settlement.netProfit || 0, settlement.isPaise ?? false)}
+                      {formatRupees(settlement.netSalePaise ?? settlement.netProfit ?? 0, true)}
                     </div>
                   </div>
                 </div>
@@ -309,7 +354,7 @@ export function SeasonLedger() {
                   <div className="p-3 bg-white rounded border">
                     <span className="font-bold text-sm text-primary">👨‍🌾 Khet Malik Hissa:</span>
                     <div className="text-xl font-bold mt-1 text-primary">
-                      {formatRupees(settlement.ownerShare || 0, settlement.isPaise ?? false)}
+                      {formatRupees(settlement.calculatedOwnerSharePaise ?? settlement.ownerShare ?? 0, true)}
                     </div>
                     <div className="mt-3">
                       <button
@@ -325,7 +370,7 @@ export function SeasonLedger() {
                   <div className="p-3 bg-white rounded border">
                     <span className="font-bold text-sm text-secondary">🚜 Bataidar / Operator Hissa:</span>
                     <div className="text-xl font-bold mt-1 text-primary">
-                      {formatRupees(settlement.operatorShare || 0, settlement.isPaise ?? false)}
+                      {formatRupees(settlement.calculatedOperatorSharePaise ?? settlement.operatorShare ?? 0, true)}
                     </div>
                     <div className="mt-3">
                       <button
@@ -336,6 +381,42 @@ export function SeasonLedger() {
                         ✓ Operator Tasdeeq Karein
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* QR Option to share verified settlement with Owner */}
+                <div
+                  className="mt-4 pt-4 flex-between items-center flex-wrap gap-3"
+                  style={{ borderTop: '1px solid var(--color-border)', backgroundColor: '#f0fdf4', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0' }}
+                >
+                  <div>
+                    <h5 className="font-bold text-sm text-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      🔑 Malik Verification QR Passport
+                    </h5>
+                    <p className="text-xs text-secondary mt-1">
+                      Malik ko sabhi kharch, verified bills, katai aur antim batai hisaab dikhane ke liye QR Code banayein.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateOwnerQR}
+                      disabled={generatingQR}
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                    >
+                      {generatingQR ? '⏳ QR Ban raha...' : '🔑 + Malik Ke Liye QR Banayein'}
+                    </button>
+                    {settlementQR && (
+                      <button
+                        type="button"
+                        onClick={() => setQrModalOpen(true)}
+                        className="btn btn-outline btn-sm"
+                      >
+                        👁️ QR Dekhein
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -370,6 +451,38 @@ export function SeasonLedger() {
           </div>
         </>
       )}
+
+      {/* Owner QR Verification Modal */}
+      <Modal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        title="🔑 Khet Malik Settlement QR Passport"
+        footer={
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => setQrModalOpen(false)}
+          >
+            Purna (Done)
+          </button>
+        }
+      >
+        {settlementQR && (
+          <div>
+            <div className="alert alert-info mb-3">
+              <span>🛡️</span>
+              <div className="text-xs">
+                <strong>Malik Verification:</strong> Is QR code ko khet malik ke sath share karein ya unse scan karwayein. Isme sabhi kharch, verified raseedein, katai, bikri aur antim batai hissedari ka pura pramanik vivaran surakshit hai.
+              </div>
+            </div>
+            <QRDisplay
+              url={settlementQR.fullUrl}
+              qrDataUrl={settlementQR.qrDataUrl}
+              label={`Malik Hisab: ${settlementQR.crop}`}
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

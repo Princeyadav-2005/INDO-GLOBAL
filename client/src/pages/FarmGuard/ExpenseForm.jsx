@@ -153,14 +153,26 @@ export function ExpenseForm() {
     try {
       setSubmitting(true)
 
+      const currentSeason = seasons.find((s) => (s.id || s._id) === formData.seasonId) || seasons[0]
+      const targetSeasonId = formData.seasonId || (currentSeason ? (currentSeason.id || currentSeason._id) : '')
+      const targetFarmId = currentSeason ? (currentSeason.farmId || currentSeason.farm || '') : ''
+
+      if (!targetSeasonId) {
+        setError('Kripya pehle khet ya fasal (Season) chunein ya jodein.')
+        return
+      }
+
       const payload = {
-        seasonId: formData.seasonId,
+        seasonId: targetSeasonId,
+        farmId: targetFarmId,
         category: formData.category,
         description: formData.description,
+        amountRupees: formData.amountRupees,
+        amountPaise: rupeesToPaise(formData.amountRupees),
         amount: rupeesToPaise(formData.amountRupees), // store as paise
         isPaise: true,
         date: formData.date,
-        crop: formData.crop,
+        crop: formData.crop || (currentSeason ? currentSeason.crop : ''),
         quantity: formData.quantity ? parseFloat(formData.quantity) : undefined,
         unit: formData.unit,
         paymentMethod: formData.paymentMethod,

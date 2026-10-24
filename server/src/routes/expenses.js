@@ -67,7 +67,14 @@ router.get('/', async (req, res, next) => {
     if (dateTo) expenses = expenses.filter(e => e.date <= new Date(dateTo).toISOString());
     expenses.sort((a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
 
-    return res.json({ success: true, data: expenses, total: expenses.length });
+    const formatted = expenses.map(e => ({
+      ...e,
+      amount: e.amountPaise != null ? e.amountPaise : (e.amount || 0),
+      amountRupees: (e.amountPaise != null ? e.amountPaise : (e.amount || 0)) / 100,
+      isPaise: true
+    }));
+
+    return res.json({ success: true, data: formatted, total: formatted.length });
   } catch (err) { next(err); }
 });
 
@@ -75,20 +82,65 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const db = dbCheck(res); if (!db) return;
-    const { seasonId, farmId, category, description, amountRupees, amountPaise, date, paymentMethod, quantity, unit, notes, voiceTranscript, dataSource } = req.body;
-    if (!seasonId || !farmId || !category || !description || (!amountRupees && !amountPaise)) {
-      return res.status(400).json({ success: false, message: 'seasonId, farmId, category, description, and amount are required.' });
+    const { seasonId, category, description, amountRupees, amountPaise, amount, isPaise, date, paymentMethod, quantity, unit, notes, voiceTranscript, dataSource } = req.body;
+    let farmId = req.body.farmId;
+
+    if (!seasonId) {
+      return res.status(400).json({ success: false, message: 'seasonId is required.' });
     }
 
-    const paise = amountPaise != null ? Math.round(Number(amountPaise)) : Math.round(parseFloat(amountRupees || 0) * 100);
+    if (!farmId) {
+      const seasonDoc = await db.collection('seasons').doc(seasonId).get();
+      if (seasonDoc.exists) {
+        const sData = seasonDoc.data();
+        farmId = sData.farmId || sData.farm || '';
+      }
+    }
+
+    // Determine paise
+    let paise = 0;
+    if (amountPaise != null) {
+      paise = Math.round(Number(amountPaise));
+    } else if (amount != null && isPaise) {
+      paise = Math.round(Number(amount));
+    } else if (amountRupees != null && amountRupees !== '') {
+      paise = Math.round(parseFloat(amountRupees) * 100);
+    } else if (amount != null && amount !== '') {
+      paise = Math.round(parseFloat(amount) * 100);
+    }
+
+    if (!category || !description || paise <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'seasonId, farmId, category, description, and valid amount (> 0) are required.'
+      });
+    }
+
+    const catNormalized = {
+      fertilizer: 'fertilizers',
+      pesticide: 'pesticides',
+      diesel: 'diesel_fuel',
+      machinery: 'tractor_machinery',
+      irrigation: 'irrigation_water'
+    }[category] || category;
+
     const data = {
-      seasonId, farmId, category, description: description.trim(),
-      amountPaise: paise, date: date ? new Date(date).toISOString() : new Date().toISOString(),
+      seasonId,
+      farmId: farmId || '',
+      category: catNormalized,
+      description: String(description).trim(),
+      amountPaise: paise,
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
       paymentMethod: paymentMethod || 'cash',
-      quantity: quantity != null ? parseFloat(quantity) : null, unit: unit || null,
-      notes: notes || '', voiceTranscript: voiceTranscript || null,
-      dataSource: dataSource || 'manual', reviewStatus: 'pending',
-      attachmentIds: [], editHistory: [], createdBy: req.user.id,
+      quantity: quantity != null && quantity !== '' ? parseFloat(quantity) : null,
+      unit: unit || null,
+      notes: notes || '',
+      voiceTranscript: voiceTranscript || null,
+      dataSource: dataSource || (voiceTranscript ? 'voice' : 'manual'),
+      reviewStatus: 'pending',
+      attachmentIds: [],
+      editHistory: [],
+      createdBy: req.user.id,
       createdAt: new Date().toISOString()
     };
 
@@ -106,6 +158,9 @@ router.get('/:id', async (req, res, next) => {
     const doc = await db.collection('expenses').doc(req.params.id).get();
     if (!doc.exists) return res.status(404).json({ success: false, message: 'Expense not found.' });
     const expense = toObj(doc);
+    expense.amount = expense.amountPaise != null ? expense.amountPaise : (expense.amount || 0);
+    expense.amountRupees = (expense.amount || 0) / 100;
+    expense.isPaise = true;
     // Fetch attachments
     if (expense.attachmentIds && expense.attachmentIds.length > 0) {
       const attSnaps = await Promise.all(expense.attachmentIds.map(aid => db.collection('attachments').doc(aid).get()));

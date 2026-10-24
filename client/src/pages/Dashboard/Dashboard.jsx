@@ -48,8 +48,15 @@ export function Dashboard() {
         const rawExpenses = expensesRes.value.expenses || expensesRes.value.data || (Array.isArray(expensesRes.value) ? expensesRes.value : [])
         setRecentExpenses(rawExpenses.slice(0, 5))
 
+        const getExpensePaise = (e) => {
+          if (e.amountPaise != null) return Number(e.amountPaise);
+          if (e.amount != null) return e.isPaise === false ? Math.round(Number(e.amount) * 100) : Number(e.amount);
+          if (e.amountRupees != null) return Math.round(Number(e.amountRupees) * 100);
+          return 0;
+        };
+
         // Compute summary totals if not provided
-        const total = rawExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0)
+        const total = rawExpenses.reduce((acc, curr) => acc + getExpensePaise(curr), 0)
         const missing = rawExpenses.filter((e) => !e.attachments?.length && !e.hasReceipt && !e.receiptUrl).length
         const pending = rawExpenses.filter((e) => e.reviewStatus === 'pending' || e.status === 'pending').length
 

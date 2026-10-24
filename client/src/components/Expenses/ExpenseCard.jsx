@@ -101,7 +101,14 @@ export function ExpenseCard({
 
         <div className="text-right">
           <div className="font-bold text-lg text-primary">
-            {formatRupees(expense.amount, expense.isPaise ?? true)}
+            {formatRupees(
+              expense.amountPaise != null
+                ? expense.amountPaise
+                : (expense.amount != null
+                    ? (expense.isPaise === false ? expense.amount * 100 : expense.amount)
+                    : (expense.amountRupees ? expense.amountRupees * 100 : 0)),
+              true
+            )}
           </div>
           <div className="mt-1">{getStatusBadge()}</div>
         </div>
